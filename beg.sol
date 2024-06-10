@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT 
 pragma solidity ^0.8.0; 
 
-// todo: finish game  
+// todo: finish game, final push   
 
 contract Player_C { 
     constructor(uint256 _fee, uint256 _balance) {
