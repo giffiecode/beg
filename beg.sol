@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT 
 pragma solidity ^0.8.0; 
 
+// todo 
+
 contract Player_C { 
     constructor(uint256 _fee, uint256 _balance) {
         owner = msg.sender;
