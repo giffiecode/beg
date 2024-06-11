@@ -2,18 +2,9 @@
 pragma solidity ^0.8.0; 
 
 // todo: 
-
-// commit reveal for privacy 
-
-//to be tested:
-// after starting can't join;  
-// test bidding and countdown; 
-// can't rebid once bidded 
-
-
-// done 
-// check time left  
-// fix countdown done error saying not in the participants list  
+// commit reveal for privacy  
+// debug reset and cont 
+// internal vs public 
 
 contract Player_C { 
     constructor(uint256 _fee, uint256 _balance) {
@@ -42,7 +33,7 @@ contract Player_C {
     address public owner; 
     uint256 public registrationFee;  
     uint256 public startingBalance; 
-    bool public openForJoin = true; 
+    bool public openForJoin = true;  
 
     modifier onlyOwner() {
         require(msg.sender == owner); 
@@ -96,8 +87,13 @@ contract Player_C {
     // Function to check the balance of the contract
     function getContractBalance() public view returns (uint) {
         return address(this).balance;
-    }
+    } 
 
+    // check the total number of players 
+    function getTotalNumOfPlayer() public view returns (uint) {
+        assert(players_addresses.length == player_status.length);
+        return players_addresses.length;
+    }
 } 
 
 
@@ -105,17 +101,23 @@ contract Game is Player_C {
     uint256 public cycleEndTime;
     uint256 public cycleDuration;
     mapping(address => uint256) public playerBids;
-    address public loser;  
+    address[] public loser;  
     uint256 public left;        // num of players left 
     uint256 public finalNumPlayer;  // parameter: num of people remaining to end the game. half of participants 
     uint256 public sumOfBalance; // total remaining balance of all remaining players when the game ends 
 
-    // pass arg to base constructor 
     constructor(uint256 _fee, uint256 _balance, uint256 _duration) Player_C(_fee, _balance) {
         cycleDuration = _duration;
+    }  
+
+
+    // suppose to be internal 
+    function startGame() public { 
         setCycleEndTime(); 
-        openForJoin = false; 
-    } 
+        openForJoin = false;
+        setFinalNumPlayer(); 
+        left = players_addresses.length;  
+    }
 
     function setFinalNumPlayer() internal {
         finalNumPlayer = uint(players_addresses.length / 2);
@@ -139,9 +141,14 @@ contract Game is Player_C {
     }  
 
     function timeLeft() public view returns (uint) {
-        return cycleEndTime - block.timestamp; 
-    }
+        require(openForJoin == false, "game hasn't started yet!"); 
+        if (block.timestamp >= cycleEndTime) {
+            return 0; 
+        } else {
+            return cycleEndTime - block.timestamp; 
+        }
 
+    }
 
     function placeBid(uint256 _bid) public current  {
         uint index = getIndex(msg.sender); 
@@ -152,30 +159,13 @@ contract Game is Player_C {
         player_status[index].balance -= _bid; 
     }
 
-    // error: not in participants list when it is 
-    function getIndex(address _address) view internal returns (uint) { 
-        bool inclusion = false; 
+    function getIndex(address _address) view internal returns (uint) {
         for (uint i = 0; i < players_addresses.length; i++) {
             if (players_addresses[i] == _address) {
-                inclusion = true;
                 return i;
             }
         }
-        revert("The caller's address is not in the participants' list");
-    } 
-
-    function getLowestBidder() internal {
-        address lowestBidder = players_addresses[0];
-        uint256 lowestBid = playerBids[lowestBidder]; 
-        for (uint i = 1; i < players_addresses.length; i++) {
-            if (player_status[i].active == true) {
-                if (playerBids[players_addresses[i]] < lowestBid) {
-                    lowestBidder = players_addresses[i];
-                    lowestBid = playerBids[players_addresses[i]];
-                }
-            }
-        }
-        loser = lowestBidder; 
+        revert("wallet not in the participants list"); 
     }
 
     modifier cycleEnds() {
@@ -183,18 +173,61 @@ contract Game is Player_C {
         _;
     }
 
-    function elimination() public { 
-        getLowestBidder(); 
-        uint index = getIndex(loser);  
-        player_status[index].active = false;  
-        player_status[index].balance = 0;
-        reset(); 
-        finish();
+    // storage memory calldata event ?? 
+    function getIndexList(address[] memory _address) view internal returns (uint[] memory) { 
+        // bool inclusion = false;  
+        uint[] memory tempResult = new uint[](_address.length);
+        uint count = 0;
+
+        for (uint i = 0; i < _address.length; i++) {
+            for (uint j = 0; j < players_addresses.length; j++) {
+                if (players_addresses[j] == _address[i]) {
+                    tempResult[count] = j;
+                    count++;
+                    break; // Optional: Break if each address in _address is unique
+                }
+            }
+        }
+
+        // Create a result array with the exact size of the number of matches found
+        uint[] memory result = new uint[](count);
+        for (uint k = 0; k < count; k++) {
+            result[k] = tempResult[k];
+        }
+        return result;
+    } 
+
+    function getLowestBidder() internal {
+        address lowestBidder = players_addresses[0];
+        uint256 lowestBid = playerBids[lowestBidder]; 
+        for (uint i = 0; i < players_addresses.length; i++) {
+            if (player_status[i].active == true) {
+                if (playerBids[players_addresses[i]] < lowestBid) {
+                    lowestBid = playerBids[players_addresses[i]]; 
+                    delete loser; 
+                    loser.push(players_addresses[i]);  
+                }
+                else if (playerBids[players_addresses[i]] == lowestBid) {
+                    loser.push(players_addresses[i]); 
+                }
+            }
+        }
     }
 
-    function getActiveNum() internal { 
+    function elimination() public { 
+        getLowestBidder(); 
+        uint[] memory index = getIndexList(loser); // = getIndex(loser);   
+        for (uint i = 0; i < index.length; i++) {
+            player_status[index[i]].active = false;  
+            player_status[index[i]].balance = 0;
+        }
+        // reset(); 
+        // finish();
+    }
+
+    function getActiveNum() public { 
         uint activeNum; 
-        for (uint i = 1; i < players_addresses.length; i++) {
+        for (uint i = 0; i < players_addresses.length; i++) {
             if (player_status[i].active == true) {
                 activeNum += 1; 
             }
@@ -208,8 +241,8 @@ contract Game is Player_C {
         _; 
     }
 
-    function reset() internal cont {
-        loser = address(0); 
+    function reset() public cont {
+        delete loser; 
         for (uint i = 0; i < players_addresses.length; i++) { 
             delete playerBids[players_addresses[i]];
         }
@@ -218,11 +251,11 @@ contract Game is Player_C {
 
     modifier end() {
         getActiveNum(); 
-        require(left <= finalNumPlayer, "Game Ends");
+        require(left <= finalNumPlayer, "Game Continue");
         _; 
     }
 
-    function finish() internal end {
+    function finish() public end {
         // split the pot based on balance pro rata  
         // is this referring to the parent contract? is fund in the parent contract?  
         uint totalContractBalance = getContractBalance();
@@ -243,10 +276,32 @@ contract Game is Player_C {
         }        
     }
 
+    function totalActivePlayer() view internal returns(uint) { 
+        uint count;
+        for (uint i = 1; i < player_status.length; i++) {
+            if (player_status[i].active == true) {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
+    // Function to get all player bids
+    function getAllBids() external view returns (address[] memory, uint256[] memory) {
+        uint256 length = players_addresses.length;
+        address[] memory addresses = new address[](length);
+        uint256[] memory bids = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            addresses[i] = players_addresses[i];
+            bids[i] = playerBids[addresses[i]];
+        }
+        return (addresses, bids);
+    }
+
     function totalBalance() internal {
         for (uint i = 1; i < players_addresses.length; i++) {
             sumOfBalance += player_status[i].balance;
         }
     }
-
 }
