@@ -2,9 +2,8 @@
 pragma solidity ^0.8.0; 
 
 // todo: 
-// commit reveal for privacy  
-// debug reset and cont 
-// internal vs public 
+// commit reveal for privacy    
+// eliminate right after elimination - still happening on the second time / when click fast 
 
 contract Player_C { 
     constructor(uint256 _fee, uint256 _balance) {
@@ -104,7 +103,12 @@ contract Game is Player_C {
     address[] public loser;  
     uint256 public left;        // num of players left 
     uint256 public finalNumPlayer;  // parameter: num of people remaining to end the game. half of participants 
-    uint256 public sumOfBalance; // total remaining balance of all remaining players when the game ends 
+    uint256 public sumOfBalance; // total remaining balance of all remaining players when the game ends   
+
+
+    // event 
+    event ContractBalance(uint balance);
+    event EtherSent(address recipient, uint amount);
 
     constructor(uint256 _fee, uint256 _balance, uint256 _duration) Player_C(_fee, _balance) {
         cycleDuration = _duration;
@@ -168,11 +172,6 @@ contract Game is Player_C {
         revert("wallet not in the participants list"); 
     }
 
-    modifier cycleEnds() {
-        block.timestamp > cycleEndTime;
-        _;
-    }
-
     // storage memory calldata event ?? 
     function getIndexList(address[] memory _address) view internal returns (uint[] memory) { 
         // bool inclusion = false;  
@@ -214,15 +213,25 @@ contract Game is Player_C {
         }
     }
 
-    function elimination() public { 
+    modifier cycleEnds() {
+        require(block.timestamp > cycleEndTime); 
+        _;
+    }
+
+
+    function elimination() public cycleEnds { 
         getLowestBidder(); 
         uint[] memory index = getIndexList(loser); // = getIndex(loser);   
         for (uint i = 0; i < index.length; i++) {
             player_status[index[i]].active = false;  
             player_status[index[i]].balance = 0;
         }
-        // reset(); 
-        // finish();
+        getActiveNum(); 
+        if (left > finalNumPlayer) {
+            reset();
+        } else {
+            finish(); 
+        }
     }
 
     function getActiveNum() public { 
@@ -235,31 +244,41 @@ contract Game is Player_C {
         }
     }
 
+    // negligible 
     modifier cont() {
         getActiveNum(); 
         require(left > finalNumPlayer, "Game Ends"); 
         _; 
     }
 
-    function reset() public cont {
+    function reset() internal cont {
         delete loser; 
         for (uint i = 0; i < players_addresses.length; i++) { 
             delete playerBids[players_addresses[i]];
         }
-        setCycleEndTime(); 
+        setCycleEndTime();  
     } 
 
+    // negligible 
     modifier end() {
         getActiveNum(); 
         require(left <= finalNumPlayer, "Game Continue");
         _; 
     }
 
-    function finish() public end {
+    function sendViaCall(address payable _to) public payable {
+        // Call returns a boolean value indicating success or failure.
+        // This is the current recommended method to use.
+        (bool sent, ) = _to.call{value: msg.value}("");
+        require(sent, "Failed to send Ether");
+    }
+
+    function finish() internal end {
         // split the pot based on balance pro rata  
         // is this referring to the parent contract? is fund in the parent contract?  
         uint totalContractBalance = getContractBalance();
-        require(totalContractBalance > 0, "No balance to distribute");
+        require(totalContractBalance > 0, "No balance to distribute"); 
+        // emit ContractBalance(totalContractBalance); 
         // get total balance of remaining bids 
         totalBalance(); 
         // Distribute funds proportionally to each player
@@ -268,8 +287,8 @@ contract Game is Player_C {
                 if (player_status[i].balance > 0) {
                     uint share = (totalContractBalance * player_status[i].balance) / sumOfBalance; 
                     if (share > 0) {
-                        (bool sent, ) = payable(players_addresses[i]).call{value: share}("");
-                        require(sent, "Failed to send Ether"); 
+                        this.sendViaCall{value: share}(payable(players_addresses[i])); 
+                        emit EtherSent(players_addresses[i], share); 
                     }
                 }
             }
@@ -299,9 +318,12 @@ contract Game is Player_C {
         return (addresses, bids);
     }
 
-    function totalBalance() internal {
-        for (uint i = 1; i < players_addresses.length; i++) {
-            sumOfBalance += player_status[i].balance;
+    function totalBalance() public {
+        sumOfBalance = 0;
+        for (uint i = 0; i < players_addresses.length; i++) {
+            if (player_status[i].active) {
+                sumOfBalance += player_status[i].balance;
+            }
         }
     }
 }
