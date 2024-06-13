@@ -200,7 +200,8 @@ contract Game is Player_C {
         player_status[index].balance -= _bid; 
         emit RevealBid(msg.sender, _bid, _salt);  
     }
-
+    
+    // omittable 
     // for testing purpose only      
     function hash(uint256 _bid, uint256 _salt) public pure returns(uint256) {
         return uint256(keccak256(abi.encodePacked(_bid, _salt))); 
@@ -349,6 +350,7 @@ contract Game is Player_C {
         return count;
     }
 
+    // omitable 
     // Function to get all player bids
     function getAllBids() external view returns (address[] memory, uint256[] memory) {
         uint256 length = players_addresses.length;
@@ -361,7 +363,8 @@ contract Game is Player_C {
         }
         return (addresses, bids);
     }
-
+    
+    // omitable 
     function getAllHashes() external view returns (address[] memory, uint256[] memory) {
         uint256 length = players_addresses.length;
         address[] memory addresses = new address[](length);
