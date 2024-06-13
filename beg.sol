@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: MIT 
 pragma solidity ^0.8.0; 
 
-// todo: 
-// commit reveal for privacy    
-// eliminate right after elimination - still happening on the second time / when click fast 
-
 contract Player_C { 
     constructor(uint256 _fee, uint256 _balance) {
         owner = msg.sender;
@@ -97,8 +93,10 @@ contract Player_C {
 
 
 contract Game is Player_C {
-    uint256 public cycleEndTime;
+    uint256 public cycleEndTime; 
+    uint256 public revealEndTime;
     uint256 public cycleDuration;
+    mapping(address => uint256) public committedHashes; 
     mapping(address => uint256) public playerBids;
     address[] public loser;  
     uint256 public left;        // num of players left 
@@ -106,9 +104,11 @@ contract Game is Player_C {
     uint256 public sumOfBalance; // total remaining balance of all remaining players when the game ends   
 
 
-    // event 
+    // event - indexed? 
     event ContractBalance(uint balance);
-    event EtherSent(address recipient, uint amount);
+    event EtherSent(address recipient, uint amount); 
+    event CommitBid(address indexed player, uint hash); 
+    event RevealBid(address indexed player, uint256 amount, uint256 salt);
 
     constructor(uint256 _fee, uint256 _balance, uint256 _duration) Player_C(_fee, _balance) {
         cycleDuration = _duration;
@@ -117,10 +117,14 @@ contract Game is Player_C {
 
     // suppose to be internal 
     function startGame() public { 
-        setCycleEndTime(); 
+        setCycleEndTime();  
+        setRevealEndTime(); 
         openForJoin = false;
         setFinalNumPlayer(); 
         left = players_addresses.length;  
+        for (uint i = 0; i < players_addresses.length; i++) { 
+            playerBids[players_addresses[i]] = 0;
+        }
     }
 
     function setFinalNumPlayer() internal {
@@ -135,14 +139,24 @@ contract Game is Player_C {
         cycleEndTime = block.timestamp + cycleDuration; 
     }
 
+    function setRevealEndTime() internal {
+        revealEndTime = block.timestamp + cycleDuration + cycleDuration;  
+    }
+
     function setFinalNumPlayer(uint256 _num) public onlyOwner {
         finalNumPlayer = _num; 
     } 
 
     modifier current() {
-        block.timestamp <= cycleEndTime;
+        require(block.timestamp <= cycleEndTime);
         _;
     }  
+
+    modifier revealing() {
+        require(block.timestamp > cycleEndTime); 
+        require(block.timestamp <= revealEndTime); 
+        _; 
+    }
 
     function timeLeft() public view returns (uint) {
         require(openForJoin == false, "game hasn't started yet!"); 
@@ -151,17 +165,46 @@ contract Game is Player_C {
         } else {
             return cycleEndTime - block.timestamp; 
         }
-
     }
 
-    function placeBid(uint256 _bid) public current  {
+    function revealTimeLeft() public view returns (uint) {
+        require(openForJoin == false, "game hasn't started yet!");  
+        require(block.timestamp > cycleEndTime);
+        if (block.timestamp >= revealEndTime) {
+            return 0;
+        } else {
+            return revealEndTime - block.timestamp; 
+        }
+    }
+
+
+    // ethers.solidityPackedKeccak256(["uint256", "uint256"], [bid, salt]);  
+    function placeBid(uint256 _hash) public current  {
         uint index = getIndex(msg.sender); 
-        require(player_status[index].balance >= _bid); 
-        require(player_status[index].active = true);  
+        require(player_status[index].active = true);   
+        require(committedHashes[msg.sender] == 0, "hashes already committed. can't re-commit"); 
         require(playerBids[msg.sender] == 0, "bids already submitted. can't rebid.");
-        playerBids[msg.sender] = _bid;
+        committedHashes[msg.sender] = _hash; 
+        emit CommitBid(msg.sender, _hash); 
+    } 
+
+    function revealBid(uint256 _bid, uint256 _salt) public revealing {
+        // if player fail to reveal, assume bid 0 
+        // if player is eliminated, elimination check active status and ignore their 0 
+        uint index = getIndex(msg.sender); 
+        require(player_status[index].balance >= _bid);  
+        require(playerBids[msg.sender] == 0, "bids already submitted. can't rebid.");    
+        require(committedHashes[msg.sender] == uint256(keccak256(abi.encodePacked(_bid, _salt))),
+            "Not Revealed: verification failed"); 
+        playerBids[msg.sender] = _bid;  
         player_status[index].balance -= _bid; 
+        emit RevealBid(msg.sender, _bid, _salt);  
     }
+
+    // for testing purpose only      
+    function hash(uint256 _bid, uint256 _salt) public pure returns(uint256) {
+        return uint256(keccak256(abi.encodePacked(_bid, _salt))); 
+    } 
 
     function getIndex(address _address) view internal returns (uint) {
         for (uint i = 0; i < players_addresses.length; i++) {
@@ -214,7 +257,7 @@ contract Game is Player_C {
     }
 
     modifier cycleEnds() {
-        require(block.timestamp > cycleEndTime); 
+        require(block.timestamp > revealEndTime); 
         _;
     }
 
@@ -256,7 +299,8 @@ contract Game is Player_C {
         for (uint i = 0; i < players_addresses.length; i++) { 
             delete playerBids[players_addresses[i]];
         }
-        setCycleEndTime();  
+        setCycleEndTime();   
+        setRevealEndTime();  
     } 
 
     // negligible 
@@ -316,6 +360,18 @@ contract Game is Player_C {
             bids[i] = playerBids[addresses[i]];
         }
         return (addresses, bids);
+    }
+
+    function getAllHashes() external view returns (address[] memory, uint256[] memory) {
+        uint256 length = players_addresses.length;
+        address[] memory addresses = new address[](length);
+        uint256[] memory hashes = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            addresses[i] = players_addresses[i];
+            hashes[i] = committedHashes[addresses[i]];
+        }
+        return (addresses, hashes);
     }
 
     function totalBalance() public {
