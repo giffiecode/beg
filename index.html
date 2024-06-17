@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>beg front-end</title>
+    <script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script language="javascript" type="text/javascript" src="web3.min.js"></script>
+    <!-- abi key needs work --> 
+    <script language="javascript" type="text/javascript" src="beg_abi.js"></script>  
+  </head>
+  <body>
+    <script>
+        var beg;   
+        var userAccount; 
+        // var web3 = new Web3(new Web3.providers.WebsocketProvider("wss://mainnet.infura.io/ws"));  
+        function startApp() {
+            // contract address needs work  
+            var begAddress = "YOUR_CONTRACT_ADDRESS";  
+            // begABI gets imported from the abi key script tag 
+            beg = new web3js.eth.Contract(begABI, begAddress);
+            var accountInterval = setInterval(function() {
+                // Check if account has changed
+                if (web3.eth.accounts[0] !== userAccount) {
+                    userAccount = web3.eth.accounts[0];
+                    // Call some function to update the UI with the new account 
+                    getIndex(userAccount)
+                    .then(displayPlayerStatus); 
+                    // get player status is not implemented yet 
+                }
+            }, 100);
+        }
+
+        function displayPlayerStatus(index) {
+            $("#player").empty();
+            for (const index of indexes) {
+            // Look up zombie details from our contract. Returns a `zombie` object
+                getPlayerStatus(index)
+                .then(function(index) {
+                // Using ES6's "template literals" to inject variables into the HTML.
+                // Append each one to our #zombies div
+                $("#player").append(`<div class="player">
+                    <ul>
+                        <li>status: ${player.active}</li>
+                        <li>balance: ${player.balance}</li>
+                    </ul>
+                </div>`);
+            });
+            }   
+        }
+
+        function joinGame(name) {
+            // This is going to take a while, so update the UI to let the user know
+            // the transaction has been sent
+            $("#txStatus").text("Joining game. This may take a while...");
+            // Send the tx to our contract:
+            return beg.methods.add_player()
+            .send({ from: userAccount })
+            .on("receipt", function(receipt) {
+                $("#txStatus").text("Successfully joined " + userAccount + "!");
+                // Transaction was accepted into the blockchain, let's redraw the UI
+                getPlayerStatus(getIndex(userAccount)).then(displayPlayerStatus);
+            })
+            .on("error", function(error) {
+                // Do something to alert the user their transaction has failed
+                $("#txStatus").text(error);
+            });
+        }
+
+        function getIndex(address) {
+            return get.methods.getIndex(address).call();
+        }
+
+        function getPlayerStatus(index) {
+            return beg.methods.player_status(index).call(); 
+        }
+
+        function getPlayerAddresses(index) {
+            return beg.methods.player_addresses(index).call();
+        }
+
+
+        window.addEventListener('load', function() {
+            // Checking if Web3 has been injected by the browser (Mist/MetaMask)
+            if (typeof web3 !== 'undefined') {
+            // Use Mist/MetaMask's provider
+            web3js = new Web3(web3.currentProvider);
+            } else {
+            // Handle the case where the user doesn't have web3. Probably
+            // show them a message telling them to install Metamask in
+            // order to use our app.
+            }
+            // Now you can start your app & access web3js freely:
+            startApp()
+        })
+    </script> 
+  </body>
+</html>
