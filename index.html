@@ -10,15 +10,19 @@
   </head>
   <body>
     <script>  
+
+    // done 
         // connect wallet 
         // join game button  
-        // display all players' status  
+        // display all players' status 
+        // get and display time left 
+        // reveal button  
+        // elimination button to trigger elimination
+    // not yet 
         // display all players' addresses  
         // display how many players left at the end 
-        // time left and what period 
-        // bid inpud 
-        // reveal button 
-        // elimination button to trigger elimination
+        // display what period 
+        // bid input
         // display elimination   
         var beg;   
         var userAccount; 
@@ -37,7 +41,13 @@
                     getIndex(userAccount)
                     .then(displayPlayerStatus); 
                 }
-            }, 100);
+            }, 100);  
+
+            beg.events.CommitBid()
+            .on("data", function(event) {
+                let data = event.returnValues;
+                getPlayerStatus(getIndex(userAccount)).then(displayPlayerStatus);
+            }).on("error", console.error);
         }
 
         function displayPlayerStatus(index) {
@@ -57,13 +67,29 @@
             });   
         }
 
+        function displayTimeLeft() {
+            $("#time").empty();
+            //for (const index of indexes) {
+            // Look up zombie details from our contract. Returns a `zombie` object
+            var time = timeLeft()
+            .then(function(time) {
+                // Using ES6's "template literals" to inject variables into the HTML.
+                // Append each one to our #zombies div
+            $("#time").append(`<div class="time">
+                <ul>
+                    <li>status: ${time}</li>
+                </ul>
+            </div>`);
+            });   
+        }
+
         function joinGame(name) {
             // This is going to take a while, so update the UI to let the user know
             // the transaction has been sent
             $("#txStatus").text("Joining game. This may take a while...");
             // Send the tx to our contract:
             return beg.methods.add_player()
-            .send({ from: userAccount })
+            .send({ from: userAccount, value: web3js.utils.toWei("10", "wei") })
             .on("receipt", function(receipt) {
                 $("#txStatus").text("Successfully joined " + userAccount + "!");
                 // Transaction was accepted into the blockchain, let's redraw the UI
@@ -134,6 +160,10 @@
             return get.methods.getIndex(address).call();
         }
 
+        function timeLeft() {
+            return get.methods.timeLeft().call(); 
+        }
+
         function getPlayerStatus(index) {
             return beg.methods.player_status(index).call(); 
         }
@@ -141,7 +171,6 @@
         function getPlayerAddresses(index) {
             return beg.methods.player_addresses(index).call();
         }
-
 
         window.addEventListener('load', function() {
             // Checking if Web3 has been injected by the browser (Mist/MetaMask)
