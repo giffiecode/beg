@@ -1,190 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8">
     <title>beg front-end</title>
     <script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
     <script language="javascript" type="text/javascript" src="web3.min.js"></script>
-    <!-- abi key needs work --> 
-    <script language="javascript" type="text/javascript" src="beg_abi.js"></script>  
-  </head>
-  <body>
-    <script>  
-
-    // done 
-        // connect wallet 
-        // join game button  
-        // display all players' status 
-        // get and display time left 
-        // reveal button  
-        // elimination button to trigger elimination
-    // not yet 
-        // display all players' addresses  
-        // display how many players left at the end 
-        // display what period 
-        // bid input
-        // display elimination   
-        var beg;   
-        var userAccount; 
-        // var web3 = new Web3(new Web3.providers.WebsocketProvider("wss://mainnet.infura.io/ws"));  
-        function startApp() {
-            // contract address needs work  
-            var begAddress = "YOUR_CONTRACT_ADDRESS";  
-            // begABI gets imported from the abi key script tag  
-            beg = new web3js.eth.Contract(begABI, begAddress);
-            // get connected wallet address 
-            var accountInterval = setInterval(function() {
-                // Check if account has changed
-                if (web3.eth.accounts[0] !== userAccount) {
-                    userAccount = web3.eth.accounts[0];
-                    // Call some function to update the UI with the new account 
-                    getIndex(userAccount)
-                    .then(displayPlayerStatus); 
-                }
-            }, 100);  
-
-            beg.events.CommitBid()
-            .on("data", function(event) {
-                let data = event.returnValues;
-                getPlayerStatus(getIndex(userAccount)).then(displayPlayerStatus);
-            }).on("error", console.error);
-        }
-
-        function displayPlayerStatus(index) {
-            $("#player").empty();
-            //for (const index of indexes) {
-            // Look up zombie details from our contract. Returns a `zombie` object
-            getPlayerStatus(index)
-            .then(function(player) {
-                // Using ES6's "template literals" to inject variables into the HTML.
-                // Append each one to our #zombies div
-            $("#players").append(`<div class="player">
-                <ul>
-                    <li>status: ${player.active}</li>
-                    <li>balance: ${player.balance}</li>
-                </ul>
-            </div>`);
-            });   
-        }
-
-        function displayTimeLeft() {
-            $("#time").empty();
-            //for (const index of indexes) {
-            // Look up zombie details from our contract. Returns a `zombie` object
-            var time = timeLeft()
-            .then(function(time) {
-                // Using ES6's "template literals" to inject variables into the HTML.
-                // Append each one to our #zombies div
-            $("#time").append(`<div class="time">
-                <ul>
-                    <li>status: ${time}</li>
-                </ul>
-            </div>`);
-            });   
-        }
-
-        function joinGame(name) {
-            // This is going to take a while, so update the UI to let the user know
-            // the transaction has been sent
-            $("#txStatus").text("Joining game. This may take a while...");
-            // Send the tx to our contract:
-            return beg.methods.add_player()
-            .send({ from: userAccount, value: web3js.utils.toWei("10", "wei") })
-            .on("receipt", function(receipt) {
-                $("#txStatus").text("Successfully joined " + userAccount + "!");
-                // Transaction was accepted into the blockchain, let's redraw the UI
-                getPlayerStatus(getIndex(userAccount)).then(displayPlayerStatus);
-            })
-            .on("error", function(error) {
-                // Do something to alert the user their transaction has failed
-                $("#txStatus").text(error);
-            });
-        }
-
-        // need edit - how to get input from player? 
-        function Bid(hash) {
-            // This is going to take a while, so update the UI to let the user know
-            // the transaction has been sent
-            $("#txStatus").text("committing hash. This may take a while...");
-            // Send the tx to our contract:
-            return beg.methods.placeBid(hash)
-            .send({ from: userAccount })
-            .on("receipt", function(receipt) {
-                $("#txStatus").text("Successfully bidded!");
-                // Transaction was accepted into the blockchain, let's redraw the UI
-                getPlayerStatus(getIndex(userAccount)).then(displayPlayerStatus);
-            })
-            .on("error", function(error) {
-                // Do something to alert the user their transaction has failed
-                $("#txStatus").text(error);
-            });
-        }
-
-        function reveal(bid, salt) {
-            // This is going to take a while, so update the UI to let the user know
-            // the transaction has been sent
-            $("#txStatus").text("revealing bid. This may take a while...");
-            // Send the tx to our contract:
-            return beg.methods.revealBid(bid, salt)
-            .send({ from: userAccount })
-            .on("receipt", function(receipt) {
-                $("#txStatus").text("Successfully revealed" + bid + "!");
-                // Transaction was accepted into the blockchain, let's redraw the UI
-                getPlayerStatus(getIndex(userAccount)).then(displayPlayerStatus);
-            })
-            .on("error", function(error) {
-                // Do something to alert the user their transaction has failed
-                $("#txStatus").text(error);
-            });
-        }
-
-        function eliminate() {
-            // This is going to take a while, so update the UI to let the user know
-            // the transaction has been sent
-            $("#txStatus").text("eliminating. This may take a while...");
-            // Send the tx to our contract:
-            return beg.methods.eliminate()
-            .send({ from: userAccount })
-            .on("receipt", function(receipt) {
-                $("#txStatus").text("eliminated" + $("#txStatus") + "!");
-                // Transaction was accepted into the blockchain, let's redraw the UI
-                getPlayerStatus(getIndex(userAccount)).then(displayPlayerStatus);
-            })
-            .on("error", function(error) {
-                // Do something to alert the user their transaction has failed
-                $("#txStatus").text(error);
-            });
-        }
-
-        function getIndex(address) {
-            return get.methods.getIndex(address).call();
-        }
-
-        function timeLeft() {
-            return get.methods.timeLeft().call(); 
-        }
-
-        function getPlayerStatus(index) {
-            return beg.methods.player_status(index).call(); 
-        }
-
-        function getPlayerAddresses(index) {
-            return beg.methods.player_addresses(index).call();
-        }
-
-        window.addEventListener('load', function() {
-            // Checking if Web3 has been injected by the browser (Mist/MetaMask)
-            if (typeof web3 !== 'undefined') {
-            // Use Mist/MetaMask's provider
-            web3js = new Web3(web3.currentProvider);
-            } else {
-            // Handle the case where the user doesn't have web3. Probably
-            // show them a message telling them to install Metamask in
-            // order to use our app.
-            }
-            // Now you can start your app & access web3js freely:
-            startApp()
-        })
-    </script> 
-  </body>
+    <script language="javascript" type="text/javascript" src="beg_abi.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Bid Elimination Game</h1>
+        <div id="timer">
+            <h2>Time Left: <span id="time"></span></h2>
+        </div>
+        <div id="stage">
+            <h2>Stage: <span id="stageName"></span></h2>
+        </div>
+        <div id="players">
+            <h2>Players' Status</h2>
+            <!-- Players' status will be displayed here -->
+        </div>
+        <div id="controls">
+            <button id="joinGameButton" class="btn">Join Game</button>
+            <div>
+                <input type="text" id="bidInput" placeholder="Enter bid">
+                <button id="bidButton" class="btn">Place Bid</button>
+            </div>
+            <button id="revealButton" class="btn">Reveal Bid</button>
+            <button id="eliminateButton" class="btn">Eliminate</button>
+        </div>
+        <div id="txStatus"></div>
+    </div>
+    <script src="app.js"></script>
+</body>
 </html>
