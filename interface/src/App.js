@@ -1,4 +1,4 @@
-import logo from './logo.svg'; 
+import logo from './yellow.png'; // Ensure the path is correct
 import './App.css';
 
 function App() {
